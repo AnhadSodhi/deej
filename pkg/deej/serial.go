@@ -77,7 +77,7 @@ func (sio *SerialIO) Start() error {
 	// set minimum read size according to platform (0 for windows, 1 for linux)
 	// this prevents a rare bug on windows where serial reads get congested,
 	// resulting in significant lag
-	minimumReadSize := 0
+	minimumReadSize := 1
 	if util.Linux() {
 		minimumReadSize = 1
 	}

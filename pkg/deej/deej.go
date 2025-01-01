@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -29,6 +30,21 @@ type Deej struct {
 	stopChannel chan bool
 	version     string
 	verbose     bool
+}
+
+// SendData sends raw data to the connected serial port
+func (sio *SerialIO) SendData(data []byte) error {
+	if !sio.connected {
+		return errors.New("serial: not connected")
+	}
+
+	_, err := sio.conn.Write(data)
+	if err != nil {
+		sio.logger.Warnw("Failed to write to serial connection", "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // NewDeej creates a Deej instance
@@ -169,6 +185,9 @@ func (d *Deej) run() {
 		}
 	}()
 
+	// Send "1" every 500 milliseconds in a separate goroutine
+	go d.sendCharacterEvery500ms("1")
+
 	// wait until stopped (gracefully)
 	<-d.stopChannel
 	d.logger.Debug("Stop channel signaled, terminating")
@@ -181,6 +200,28 @@ func (d *Deej) run() {
 		os.Exit(0)
 	}
 }
+
+func (d *Deej) sendCharacterEvery500ms(charToSend string) {
+	ticker := time.NewTicker(500 * time.Millisecond) // Set up the ticker for 500 ms intervals
+	defer ticker.Stop() // Stop the ticker when this function exits
+
+	for {
+		select {
+		case <-ticker.C:
+			// Use the SendData method to send the character over the serial port
+			err := d.serial.SendData([]byte(charToSend)) // Send data using the new method
+			if err != nil {
+				d.logger.Warnw("Failed to send character over serial", "error", err)
+			} else {
+				d.logger.Debugw("Sent character over serial", "character", charToSend)
+			}
+		case <-d.stopChannel:
+			// Stop the goroutine gracefully when the stop channel is signaled
+			return
+		}
+	}
+}
+
 
 func (d *Deej) signalStop() {
 	d.logger.Debug("Signalling stop channel")
