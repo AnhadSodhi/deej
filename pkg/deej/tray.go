@@ -1,6 +1,8 @@
 package deej
 
 import (
+	"os"
+	"os/exec"
 	"github.com/getlantern/systray"
 
 	"github.com/omriharel/deej/pkg/deej/icon"
@@ -23,6 +25,8 @@ func (d *Deej) initializeTray(onDone func()) {
 		refreshSessions := systray.AddMenuItem("Re-scan audio sessions", "Manually refresh audio sessions if something's stuck")
 		refreshSessions.SetIcon(icon.RefreshSessions)
 
+		restartApp := systray.AddMenuItem("Restart", "Restart the deej application")
+
 		if d.version != "" {
 			systray.AddSeparator()
 			versionInfo := systray.AddMenuItem(d.version, "")
@@ -40,7 +44,6 @@ func (d *Deej) initializeTray(onDone func()) {
 				// quit
 				case <-quit.ClickedCh:
 					logger.Info("Quit menu item clicked, stopping")
-
 					d.signalStop()
 
 				// edit config
@@ -59,10 +62,14 @@ func (d *Deej) initializeTray(onDone func()) {
 				// refresh sessions
 				case <-refreshSessions.ClickedCh:
 					logger.Info("Refresh sessions menu item clicked, triggering session map refresh")
-
-					// performance: the reason that forcing a refresh here is okay is that users can't spam the
-					// right-click -> select-this-option sequence at a rate that's meaningful to performance
 					d.sessions.refreshSessions(true)
+
+				// restart app
+				case <-restartApp.ClickedCh:
+					logger.Info("Restart menu item clicked, restarting application")
+					if err := restartApplication(); err != nil {
+						logger.Warnw("Failed to restart application", "error", err)
+					}
 				}
 			}
 		}()
@@ -83,4 +90,26 @@ func (d *Deej) initializeTray(onDone func()) {
 func (d *Deej) stopTray() {
 	d.logger.Debug("Quitting tray")
 	systray.Quit()
+}
+
+func restartApplication() error {
+	// Get the path of the currently running executable
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	// Start a new process for the executable
+	cmd := exec.Command(execPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Exit the current process
+	os.Exit(0)
+	return nil // This line will never be reached
 }
